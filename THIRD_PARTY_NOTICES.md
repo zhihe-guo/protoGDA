@@ -1,7 +1,8 @@
 # Third-Party Notices
 
-本仓库遵循 MIT License（见 `LICENSE`），其中包含的第三方代码/权重归属如下。除
-`pretrained/` 下另有说明的文件外，本仓库不打包任何无开源许可的第三方数据。
+本仓库以"保留所有权利"方式发布（未附带开源许可）。以下说明仅用于澄清第三方
+代码/权重的归属与出处，不构成任何再分发授权。除 `pretrained/` 下另有说明的
+文件外，本仓库不打包任何无开源许可的第三方数据。
 
 ## Baseline reimplementations（据论文重写，代码为作者原创）
 
@@ -21,8 +22,8 @@ TransCDR（Xia et al., BMC Biology 2024）的 Murcko 骨架划分方法；TransC
 
 ## `pretrained/` 权重
 
-`pretrained/` 下的 `.pt` 文件为本工作训练所得的模型权重（MIT，见 `LICENSE`），
-对应论文第 5 章各场景结果：
+`pretrained/` 下的 `.pt` 文件为本工作训练所得的模型权重（保留所有权利，见仓库
+顶部说明），对应论文第 5 章各场景结果：
 
 | 目录 | 对应论文结果 |
 |---|---|

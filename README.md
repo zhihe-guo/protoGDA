@@ -74,7 +74,7 @@ Drug_SMILES ──► Mol_Graph(+GMM) ──► EGNN/EQGAT 逐层演化 ──�
                                               M_accum ──► MLP ──► y_hat
 ```
 
-## License 与第三方
+## 使用与第三方
 
-- 主代码与 `pretrained/` 权重：**MIT License**（见 [LICENSE](LICENSE)）。
+- 本仓库以"保留所有权利"方式发布（未附带开源许可），供审稿与学术查阅使用；如需在其他项目/产品中复用，请先联系作者获取许可。
 - 基线为论文的独立重写实现，第三方归属与出处见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
