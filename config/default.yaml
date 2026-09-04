@@ -1,0 +1,138 @@
+# Cell-Drug Cross-Attention 默认配置（基底 = GINE + GMM 药效团模态）
+#
+# 结构：
+#   data      数据源、缓存路径与数据划分
+#   model     模型架构（GNN / 药效团模态 / 投影分支 / 正则化）
+#   training  训练超参
+#   eval      评估 checkpoint
+#   meta      元学习（默认关闭）
+#   cv        交叉验证（默认关闭）
+#
+# 基底选型依据（25ep 同口径实验，详见 results.md）：
+#   drug_cold  Test Pearson：GINE+GMM=0.6894 > GAT 无药效团=0.6552 > 其余
+#   interpolation Test RMSE：GINE+GMM=1.1550 < GAT 无药效团=1.1662
+#   → 药效团 GMM 模态的最优承载架构为 GINE（2D 拓扑 + 键类型语境 + sum 聚合）。
+#
+# 药冷提示：drug_cold 分裂下验证集仅含 ~13 个药物，val_rmse 噪声大，
+# 早停可能在 epoch 5 附近触发；药物侧正则化（drug_dropout/drug_noise_std）
+# 建议保持 >=0.3，防止模型死记训练药物。
+
+data:
+  dataset_name: GDSC2
+  batch_size: 1280
+  num_workers: 4
+  pin_memory: true
+  normalize_cell_features: true       # 是否对细胞特征做 Z-score 归一化
+  cell_pca_dim: 256                   # 细胞特征 PCA 降维目标维度（0 = 不使用 PCA）
+  split_mode: interpolation           # 数据划分模式：interpolation | cell_cold | drug_cold
+
+  # ---- 预计算缓存（缺失时由 dataset.py 自动调用 scripts/precompute_*.py 生成）----
+  conformer_cache_path: data/conformers.pt           # 3D 构象缓存（仅 EGNN 使用）
+  chemberta_cache_path: data/chemberta_embeddings.pt # ChemBERTa 向量缓存
+  pharmacophore_cache_path: data/pharmacophores_gmm.pt # 药效团 GMM 协方差特征值缓存（--gmm 生成）
+  pharm_num_conformers: 30                           # 药效团模态的构象采样数
+
+  # ---- 外部毒性数据集（由 extract_features.py 预计算）------------------------
+  external:
+    enabled: false                    # true = 使用外部数据替代 GDSC2
+    pairs_parquet: data/dti_pairs.parquet
+    cell_npz: data/cell_gene_expression.npz
+
+model:
+  # ---- 基础架构 ---------------------------------------------------------
+  hidden_dim: 64              # D：统一隐藏维度
+  num_gnn_layers: 3           # GNN 层数
+  gnn_type: egnn              # GNN 类型：egnn（基底，含自注意力）| gine | gat | gcn | egconv
+  gnn_heads: 8                # GNN 多头注意力头数
+  dropout: 0.1                # 全局 Dropout 概率
+  num_probes: 16              # M：细胞系通路探针 token 数量
+  num_heads_cross_attn: 8     # 交叉注意力头数
+  readout_hidden: [256, 128]  # Readout MLP 各隐藏层维度
+  egnn_use_attention: true    # EGNN 消息内自注意力（softmax 邻居加权，保持等变性）——正式基底开启
+
+  # ---- 交互模式 ---------------------------------------------------------
+  interaction_mode: residual   # memory（门控记忆累积）| residual（Q 自更新残差连接）
+  memory_init: cell_probe_gated  # 记忆初始状态：cell_probe | zero | cell_probe_gated——仅 memory 模式生效
+  cross_attn_direction: cell_to_drug   # 交叉注意力方向：cell_to_drug | drug_to_cell
+  num_drug_probes: 16         # 药物探针 token 数量（drug_to_cell 模式下使用）
+  num_cell_tokens: 16         # 细胞 token 数量（drug_to_cell 模式下使用）
+
+  # ---- 层间塔内训练（消融实验，默认关闭）----------------------------------
+  # 开启后，每层交叉注意力之前对细胞探针 Q 施加塔内更新块（自注意力 + FFN），
+  # 使细胞系塔从"静态一次性投影"变为"随层数逐层参与训练"。
+  cell_tower_interleaved: false  # true = 层间插入细胞塔内训练块
+  cell_tower_self_attn: true     # 塔内块是否含探针自注意力（false = 仅 FFN）
+  cell_tower_heads: 8            # 塔内自注意力头数
+
+  # ---- EGNN 3D 几何（仅 gnn_type=egnn 生效）-------------------------------
+  rbf_type: saturated         # 距离编码：saturated（1-exp(-d^2)）| gaussian（多中心 Gaussian RBF 基）
+  rbf_centers: [1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 3.5, 4.0]  # gaussian RBF 中心（Å）
+  rbf_sigma: 0.5              # gaussian RBF 带宽 σ（Å）
+  use_equiv_feats: false      # 将演化坐标的旋转不变描述子（质心距离、跨层位移范数）注入节点特征
+  equiv_feat_dim: 8           # 等变描述子投影维度
+  egnn_attn_heads: 4          # EGNN 自注意力头数（`egnn_use_attention` 见上方基础架构段）
+
+  # ---- 药效团 GMM 协方差特征值模态（逐原子拼接进节点特征，旋转不变）--------
+  use_pharmacophore: true     # 是否启用药效团模态
+  pharm_feat_dim: 18          # 每原子特征维度（6 类 × 3 个协方差特征值）
+  pharm_agg: max              # 同类多实例重叠原子的聚合方式：max | mean
+  pharm_use_gmm: true         # true = sklearn GMM 拟合分量协方差（基底）；false = 每实例经验协方差
+  pharm_residual: false       # true = 药效团单独投影后残差注入节点特征（绕过共享 LayerNorm，避免稀疏零值被放大成伪信号）
+  gat_edge_attr: false        # true = 让 GAT 也消费边特征（键类型）语境，使药效团特征能被注意力正确解读（仅 gnn_type=gat 生效）
+
+  # ---- 药物侧投影分支 ---------------------------------------------------
+  use_morgan: true            # 是否启用 Morgan 指纹分支
+  morgan_radius: 2            # Morgan 指纹半径
+  morgan_n_bits: 1024         # Morgan 指纹位数
+  use_chemberta: true         # 是否启用 ChemBERTa 分支
+
+  # ---- 药物侧正则化（药冷场景建议 >=0.3，防止死记训练药物）----------------
+  enable_drug_dropout: true   # 是否启用 atom_proj 独立 Dropout
+  drug_dropout: 0.3           # atom_proj Dropout（越高越抑制药物信号）
+  enable_drug_noise: true     # 是否启用药物投影层噪声
+  drug_noise_std: 0.3         # Morgan/ChemBERTa 投影后高斯噪声标准差（仅训练时生效）
+  enable_drug_drop: true      # 是否启用药物指纹随机抹零
+  drug_drop_prob: 0.0         # 每样本每分支独立清零概率（仅训练时生效）
+
+  # ---- 细胞侧正则化 -----------------------------------------------------
+  enable_cell_dropout: false  # 是否启用细胞投影器独立 Dropout
+  cell_dropout: 0.0           # 细胞投影器 Dropout（越高越抑制细胞系信号）
+  enable_cell_noise: false    # 是否启用细胞特征噪声
+  cell_noise_std: 0.0         # 细胞特征高斯噪声标准差（仅训练时生效）
+  enable_cell_drop: false     # 是否启用细胞特征随机抹零
+  cell_drop_prob: 0.0         # 单个样本细胞特征清零概率（仅训练时生效）
+
+training:
+  epochs: 100                 # 最大训练轮数
+  lr: 1.0e-4                  # 初始学习率
+  weight_decay: 1.0e-4        # 权重衰减
+  scheduler: plateau          # 学习率调度策略：plateau | cosine | none
+  warmup_epochs: 5            # 学习率预热轮数
+  lr_reduce_patience: 5       # Plateau 等待轮数
+  lr_reduce_factor: 0.5       # Plateau 缩放因子
+  lr_min: 1.0e-6              # 学习率下限
+  early_stopping_patience: 15 # 早停耐心
+  seed: 42                    # 随机种子
+  device: auto                # 训练设备
+  checkpoint_dir: checkpoints/cellquery_interpolation # 检查点保存目录
+  log_every: 50               # 日志输出间隔（步）
+
+eval:
+  checkpoint: checkpoints/best.pt
+
+meta:
+  enabled: false              # true = 使用 Reptile 元训练
+  algorithm: reptile          # 元学习算法
+  n_tasks: 8                  # 每 meta-batch 的任务数
+  support_frac: 0.7           # 每个 drug-task 中支撑集占比
+  inner_lr: 1.0e-3            # 内循环 SGD 学习率（通常 > meta_lr）
+  inner_steps: 5              # 内循环 SGD 步数
+  meta_lr: 1.0e-4             # 外循环元更新学习率（覆盖 training.lr）
+  meta_steps_per_epoch: 50    # 每 epoch 的 meta-batch 数量
+  meta_weight_decay: 0.0      # 元更新中的权重衰减
+  adapt_eval: true            # 验证/测试时是否进行内循环自适应
+
+cv:
+  enabled: false              # true = 运行 K 折交叉验证
+  k: 5                        # 折数
+  split_by: interpolation     # 交叉验证划分模式：interpolation | drug_cold | cell_cold

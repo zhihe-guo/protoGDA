@@ -1,0 +1,45 @@
+# CANDELA — Interpolation split
+# Architecture follows Campana et al. (2024) NAR Genomics & Bioinformatics.
+# Uses precision-oncology hyperparameters. Raw log(IC50) labels.
+# Cell features: PCA reduced (17737 -> 256) with expression encoder adapted accordingly.
+
+data:
+  dataset_name: GDSC2
+  batch_size: 128
+  num_workers: 4
+  pin_memory: true
+  split_mode: interpolation
+  pca_dim: 256
+
+model:
+  # Drug encoder: 3 x GATv2Conv with 8 heads, 128-dim node embeddings
+  gat_heads: 8
+  node_embed_dim: 128
+  # Drug module self-attention pooling hidden dim
+  drug_pool_hidden: 1024
+  # Drug score MLP hidden (precision oncology: 1152, drug discovery: 2027)
+  drug_score_hidden: 1152
+  # Expression encoder bottleneck (input now 256-dim from PCA)
+  expr_hidden: 512
+  expr_bottleneck: 128
+  # Expression module MLP hidden
+  expr_score_hidden: 256
+  # Interaction module MLP hidden
+  interaction_hidden: 512
+  dropout: 0.3
+
+training:
+  epochs: 150
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  scheduler: plateau
+  warmup_epochs: 5
+  lr_reduce_patience: 7
+  lr_reduce_factor: 0.5
+  lr_min: 1.0e-6
+  early_stopping_patience: 10
+  seed: 42
+  device: auto
+  checkpoint_dir: checkpoints/candela_interpolation
+  log_every: 50
+  gradnorm_monitor: false

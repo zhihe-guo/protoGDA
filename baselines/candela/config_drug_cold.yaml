@@ -1,0 +1,37 @@
+# CANDELA — Drug cold-start split
+# Cell features: PCA reduced (17737 -> 256). Raw log(IC50) labels.
+
+data:
+  dataset_name: GDSC2
+  batch_size: 128
+  num_workers: 4
+  pin_memory: true
+  split_mode: drug_cold
+  pca_dim: 256
+
+model:
+  gat_heads: 8
+  node_embed_dim: 128
+  drug_pool_hidden: 1024
+  drug_score_hidden: 1152
+  expr_hidden: 512
+  expr_bottleneck: 128
+  expr_score_hidden: 256
+  interaction_hidden: 512
+  dropout: 0.3
+
+training:
+  epochs: 150
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  scheduler: plateau
+  warmup_epochs: 5
+  lr_reduce_patience: 7
+  lr_reduce_factor: 0.5
+  lr_min: 1.0e-6
+  early_stopping_patience: 10
+  seed: 42
+  device: auto
+  checkpoint_dir: checkpoints/candela_drug_cold
+  log_every: 50
+  gradnorm_monitor: false

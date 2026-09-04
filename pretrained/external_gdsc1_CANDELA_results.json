@@ -1,0 +1,13 @@
+{
+  "model": "candela",
+  "n_pairs": 46993,
+  "pooled_pearson": 0.19798943400382996,
+  "pooled_spearman": 0.20843881881715648,
+  "rmse_ref_only": 3.200601816177368,
+  "n_drugs_aggregated": 62,
+  "drug_level_pearson": 0.17203997082266964,
+  "drug_level_spearman": 0.15393719624285465,
+  "per_drug_pearson_mean": 0.2819423701001564,
+  "per_drug_pearson_std": 0.16305296309388462,
+  "per_drug_pearson_n": 62
+}

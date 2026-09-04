@@ -1,0 +1,12 @@
+{
+  "n_pairs": 46993,
+  "pooled_pearson": 0.5200691223144531,
+  "pooled_spearman": 0.4311654251250159,
+  "rmse_ref_only": 2.8788187503814697,
+  "n_drugs_aggregated": 62,
+  "drug_level_pearson": 0.5779992252529635,
+  "drug_level_spearman": 0.49877867593362046,
+  "per_drug_pearson_mean": 0.2931298521251143,
+  "per_drug_pearson_std": 0.15383487478590668,
+  "per_drug_pearson_n": 62
+}

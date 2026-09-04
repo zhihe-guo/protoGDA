@@ -1,0 +1,52 @@
+{
+  "config": "config/cellquery_scaffold_cold.yaml",
+  "split_by": "scaffold_cold",
+  "k": 6,
+  "seed": 42,
+  "fold_results": [
+    {
+      "fold": 1,
+      "pearson": 0.5295
+    },
+    {
+      "fold": 2,
+      "pearson": 0.6779
+    },
+    {
+      "fold": 3,
+      "pearson": 0.585
+    },
+    {
+      "fold": 4,
+      "pearson": 0.3801
+    },
+    {
+      "fold": 5,
+      "pearson": 0.4629
+    },
+    {
+      "fold": 6,
+      "pearson": 0.4046
+    }
+  ],
+  "mean_std": {
+    "pearson_r": {
+      "mean": 0.5067,
+      "std": 0.1035
+    }
+  },
+  "pooled_metrics": {
+    "rmse": 2.3440327644348145,
+    "mae": 1.725823998451233,
+    "r2": 0.2578090564217713,
+    "pearson_r": 0.5380890965461731,
+    "spearman_r": 0.48591109997161724
+  },
+  "drug_level_metrics": {
+    "rmse": 2.0262537002563477,
+    "mae": 1.391653060913086,
+    "r2": 0.17625328758718628,
+    "pearson_r": 0.47720086574554443,
+    "spearman_r": 0.3660322586667164
+  }
+}

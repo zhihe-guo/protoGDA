@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data & checkpoints (root only — src/data is source code)
+/data/
+/checkpoints/
+/runs/
+/wandb/
+*.pt
+*.pth
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TDC cache
+.tdc/
+
+# Third-party code without an open-source license — NOT distributed with this repo
+# (TransCDR official code is all-rights-reserved; only its scaffold-split protocol is
+#  re-implemented inside scripts/cv_runner.py — see THIRD_PARTY_NOTICES.md)
+/baselines/transcdr/
+
+# Private agent/history folders
+.specstory/
+
+# Data caches inside baselines (non-source; mirror .cbmignore)
+baselines/**/data/
+baselines/**/*.pkl
+
+# External data caches (mirror .cbmignore): not source, not redistributed
+/dataset/
+
+# Release model weights: explicitly tracked despite the global *.pt rule
+!pretrained/
+!pretrained/**/
+!pretrained/**/*.pt
+!pretrained/**/*.json

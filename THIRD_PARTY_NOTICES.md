@@ -1,0 +1,36 @@
+# Third-Party Notices
+
+本仓库遵循 MIT License（见 `LICENSE`），其中包含的第三方代码/权重归属如下。除
+`pretrained/` 下另有说明的文件外，本仓库不打包任何无开源许可的第三方数据。
+
+## Baseline reimplementations（据论文重写，代码为作者原创）
+
+`baselines/` 中的基线实现均依据公开发表的论文**独立重写**
+（文件头注明 "Faithful reimplementation of ..."，Zero `src/` dependency），
+并非原作者的官方代码拷贝。使用时应引用原始论文：
+
+| 目录 | 论文 | 原始出处 |
+|---|---|---|
+| `baselines/candela/` | Campana et al., "Cancer drug sensitivity estimation using modular deep Graph Neural Networks", NAR Genom. Bioinform. (2024) | 官方代码存档于 Zenodo，无开源许可（故采用独立重写） |
+| `baselines/mgataf/` | Saeed et al., "MGATAF: multi-channel graph attention network with adaptive fusion for cancer-drug response prediction", BMC Bioinformatics (2025) | 作者未公开发布代码（按论文声明需邮件索取），故采用独立重写 |
+| `baselines/graphdrp/` | Nguyen et al., "Graph Convolutional Networks for Drug Response Prediction", IEEE/ACM TCBB (2021) | 官方仓库 `hauldhut/GraphDRP`，Apache-2.0 |
+
+`scripts/cv_runner.py` 中冷支架（scaffold-cold）划分协议参照
+TransCDR（Xia et al., BMC Biology 2024）的 Murcko 骨架划分方法；TransCDR 官方
+代码（GitHub / Zenodo）未提供开源许可，本仓库**不包含**其代码。
+
+## `pretrained/` 权重
+
+`pretrained/` 下的 `.pt` 文件为本工作训练所得的模型权重（MIT，见 `LICENSE`），
+对应论文第 5 章各场景结果：
+
+| 目录 | 对应论文结果 |
+|---|---|
+| `protoGDA_interpolation/` | 表 1/2 内插 CV（0.9344 ± 0.0016） |
+| `protoGDA_cell_cold/` | 表 1/2 细胞冷启动 CV（0.8735 ± 0.0036） |
+| `protoGDA_drug_cold/` | 表 1/2 药物冷启动 CV（0.5305 ± 0.1842）与表 4 GDSC1 外部验证 |
+| `protoGDA_scaffold_cold/` | 表 2 冷支架启动 CV（0.5067 ± 0.1035） |
+| `CANDELA_drug_cold/`, `MGATAF_drug_cold/` | 表 1 药物冷启动基线（v3 确定性协议复现） |
+
+各目录同时含 `cv_results.json`（逐折 + 汇总指标）；`external_gdsc1_*.json`
+为 5.3 节 GDSC1 零样本外部验证结果。

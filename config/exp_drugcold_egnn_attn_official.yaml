@@ -1,0 +1,85 @@
+data:
+  dataset_name: GDSC2
+  batch_size: 1280
+  num_workers: 4
+  pin_memory: true
+  normalize_cell_features: true
+  split_mode: drug_cold
+  conformer_cache_path: data/conformers.pt
+  chemberta_cache_path: data/chemberta_embeddings.pt
+  pharmacophore_cache_path: data/pharmacophores_gmm.pt
+  pharm_num_conformers: 30
+  cell_pca_dim: 256
+  external:
+    enabled: false
+    pairs_parquet: data/dti_pairs.parquet
+    cell_npz: data/cell_gene_expression.npz
+model:
+  num_probes: 16
+  hidden_dim: 64
+  num_gnn_layers: 3
+  gnn_type: egnn
+  gnn_heads: 8
+  dropout: 0.1
+  interaction_mode: residual
+  memory_init: cell_probe
+  enable_cell_dropout: false
+  cell_dropout: 0.0
+  enable_cell_noise: false
+  cell_noise_std: 0.0
+  enable_cell_drop: false
+  cell_drop_prob: 0.0
+  num_heads_cross_attn: 8
+  readout_hidden:
+  - 256
+  - 128
+  use_morgan: true
+  morgan_radius: 2
+  morgan_n_bits: 1024
+  cross_attn_direction: cell_to_drug
+  num_drug_probes: 16
+  num_cell_tokens: 16
+  use_chemberta: true
+  enable_drug_dropout: true
+  drug_dropout: 0.3
+  enable_drug_noise: true
+  drug_noise_std: 0.3
+  enable_drug_drop: true
+  drug_drop_prob: 0.0
+  use_pharmacophore: true
+  pharm_feat_dim: 18
+  pharm_agg: max
+  pharm_use_gmm: true
+  egnn_use_attention: true
+  egnn_attn_heads: 4
+training:
+  epochs: 60
+  lr: 0.0001
+  weight_decay: 0.0001
+  scheduler: plateau
+  warmup_epochs: 5
+  lr_reduce_patience: 5
+  lr_reduce_factor: 0.5
+  lr_min: 1.0e-06
+  early_stopping_patience: 10
+  seed: 42
+  device: auto
+  checkpoint_dir: checkpoints/exp_drugcold_egnn_attn_official
+  log_every: 50
+eval:
+  checkpoint: checkpoints/exp_drugcold_egnn_attn_official/best.pt
+meta:
+  enabled: false
+  algorithm: reptile
+  n_tasks: 8
+  support_frac: 0.7
+  inner_lr: 0.001
+  inner_steps: 5
+  meta_lr: 0.0001
+  meta_steps_per_epoch: 50
+  meta_weight_decay: 0.0
+  adapt_eval: true
+cv:
+  enabled: false
+  k: 5
+  split_by: interpolation

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cellquery"
+version = "0.1.0"
+description = "Cell-line probe cross-attention model for drug-cell interaction prediction"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0.0",
+    "torch-geometric>=2.4.0",
+    "rdkit>=2023.3.1",
+    "pandas>=2.1.4,<3",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "scikit-learn>=1.3.0",
+    "omegaconf>=2.3.0",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+# Linux only: pytdc works out-of-box (tiledbsoma wheels available)
+linux-data = ["pytdc>=0.4.0", "fuzzywuzzy>=0.18.0", "python-Levenshtein>=0.27.0"]
+dev = [
+    "jupyter>=1.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+]
+wandb = ["wandb>=0.15.0"]
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.setuptools]
+py-modules = []

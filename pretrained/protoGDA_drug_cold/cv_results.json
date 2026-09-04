@@ -1,0 +1,52 @@
+{
+  "config": "config/cellquery_drug_cold.yaml",
+  "split_by": "drug_cold",
+  "k": 6,
+  "seed": 42,
+  "fold_results": [
+    {
+      "fold": 1,
+      "pearson": 0.2757
+    },
+    {
+      "fold": 2,
+      "pearson": 0.3315
+    },
+    {
+      "fold": 3,
+      "pearson": 0.6984
+    },
+    {
+      "fold": 4,
+      "pearson": 0.582
+    },
+    {
+      "fold": 5,
+      "pearson": 0.5052
+    },
+    {
+      "fold": 6,
+      "pearson": 0.7905
+    }
+  ],
+  "mean_std": {
+    "pearson_r": {
+      "mean": 0.5305,
+      "std": 0.1842
+    }
+  },
+  "pooled_metrics": {
+    "rmse": 2.3171746730804443,
+    "mae": 1.6986726522445679,
+    "r2": 0.27471972346826,
+    "pearson_r": 0.5614193677902222,
+    "spearman_r": 0.48082400597427555
+  },
+  "drug_level_metrics": {
+    "rmse": 1.985594630241394,
+    "mae": 1.386136531829834,
+    "r2": 0.20898042249875215,
+    "pearson_r": 0.5224617719650269,
+    "spearman_r": 0.3241127933242481
+  }
+}
