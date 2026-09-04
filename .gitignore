@@ -57,3 +57,22 @@ baselines/**/*.pkl
 !pretrained/**/
 !pretrained/**/*.pt
 !pretrained/**/*.json
+
+# ---- Not-for-publication internal materials (kept locally, excluded) ----
+/AGENTS.md
+/.cbmignore
+/.cursorindexingignore
+/idea.md
+/new idea.md
+/WORKLOG.md
+/results.md
+/notebooks/
+/results/
+/docs/todo.md
+/docs/paper_draft.md
+/docs/paper_draft1.md
+/docs/optimization_analysis.md
+/docs/scaffold_cold_verification.md
+/docs/submission/
+/ARCHITECTURE.md
+/docs/ARCHITECTURE.md

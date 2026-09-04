@@ -34,3 +34,9 @@ TransCDR（Xia et al., BMC Biology 2024）的 Murcko 骨架划分方法；TransC
 
 各目录同时含 `cv_results.json`（逐折 + 汇总指标）；`external_gdsc1_*.json`
 为 5.3 节 GDSC1 零样本外部验证结果。
+
+## 其它第三方资源
+
+| 资源 | 出处 | 许可 |
+|---|---|---|
+| `scripts/fonts/NotoSansSC.ttf`（含 Bold） | Google Noto Fonts | SIL Open Font License 1.1（© Google；license 全文见 https://openfontlicense.org ） |
