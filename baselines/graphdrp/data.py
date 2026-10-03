@@ -186,7 +186,12 @@ def _get_label_column(df: pd.DataFrame) -> str:
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def get_graphdrp_dataloaders(cfg: DictConfig) -> tuple[DataLoader, DataLoader, DataLoader, dict, dict]:
+def get_graphdrp_dataloaders(
+    cfg: DictConfig,
+    train_df: pd.DataFrame | None = None,
+    valid_df: pd.DataFrame | None = None,
+    test_df: pd.DataFrame | None = None,
+) -> tuple[DataLoader, DataLoader, DataLoader, dict, dict]:
     """Return (train_ldr, valid_ldr, test_ldr, registries, meta).
 
     No label normalization. Raw gene expression (no PCA). 78-dim atoms.
@@ -209,8 +214,14 @@ def get_graphdrp_dataloaders(cfg: DictConfig) -> tuple[DataLoader, DataLoader, D
           f"{df['Drug_ID'].nunique()} drugs, "
           f"{df['Cell_Line_ID'].nunique()} cell lines")
 
-    # --- Split ---
-    splits = _custom_split(df, split_mode=split_mode, seed=seed)
+    # --- Split (or inject the canonical v3 fold manifest) ---
+    injected = (train_df, valid_df, test_df)
+    if any(part is not None for part in injected):
+        if not all(part is not None for part in injected):
+            raise ValueError("train_df, valid_df, and test_df must be provided together.")
+        splits = {"train": train_df.copy(), "valid": valid_df.copy(), "test": test_df.copy()}
+    else:
+        splits = _custom_split(df, split_mode=split_mode, seed=seed)
     for name in ("train", "valid", "test"):
         s = splits[name]
         print(f"  {name}: {len(s):,} pairs, "
@@ -243,9 +254,13 @@ def get_graphdrp_dataloaders(cfg: DictConfig) -> tuple[DataLoader, DataLoader, D
         cell_rows.append(feat)
     cell_features = np.stack(cell_rows, axis=0)
 
-    # Z-score normalize
-    mean = cell_features.mean(axis=0)
-    std = cell_features.std(axis=0)
+    # Fit normalization only on training cells. This is material in cell-cold CV.
+    train_cells = set(splits["train"]["Cell_Line_ID"].unique())
+    train_mask = np.array([cid in train_cells for cid in cell_ids], dtype=bool)
+    if not train_mask.any():
+        raise ValueError("Training split contains no cells for feature normalization.")
+    mean = cell_features[train_mask].mean(axis=0)
+    std = cell_features[train_mask].std(axis=0)
     std[std < 1e-8] = 1.0
     cell_features = ((cell_features - mean) / std).astype(np.float32)
     print(f"  Cell table shape: {cell_features.shape}")
@@ -281,6 +296,7 @@ def get_graphdrp_dataloaders(cfg: DictConfig) -> tuple[DataLoader, DataLoader, D
         "drug_id_to_idx": drug_id_to_idx,
         "cell_id_to_idx": cell_id_to_idx,
         "train_df": splits["train"],
+        "cell_preprocessing": {"mean": mean, "std": std, "fit_cell_ids": sorted(map(str, train_cells))},
     }
     meta = {"cell_dim": int(cell_table.shape[1]), "label_col": label_col}
     return train_loader, valid_loader, test_loader, registries, meta

@@ -19,6 +19,7 @@ from src.config import load_config, resolve_device
 from src.data.dataset import get_dataloaders
 from src.models.model import CellDrugModel
 from src.training.trainer import Trainer
+from src.training.checkpointing import load_checkpoint
 
 
 def set_seed(seed: int):
@@ -33,6 +34,8 @@ def main():
     parser = argparse.ArgumentParser(description="Train drug response prediction model")
     parser.add_argument("--config", type=str, default=str(ROOT / "config" / "default.yaml"),
                         help="Path to config YAML")
+    parser.add_argument("--resume", type=str, default=None,
+                        help="Resume an epoch-boundary last.pt checkpoint after compatibility checks")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -83,16 +86,15 @@ def main():
         )
 
     print("Starting training...")
-    result = trainer.train()
+    result = trainer.train(resume_path=args.resume)
     print(f"Training finished. Best validation RMSE: {result['best_val_rmse']:.4f}")
 
     # Load best checkpoint before test evaluation
-    best_path = str(Path(cfg.training.checkpoint_dir) / "best.pt")
-    if Path(best_path).exists():
-        print(f"Loading best checkpoint: {best_path}")
-        state = torch.load(best_path, map_location=device, weights_only=False)
-        model.load_state_dict(state["model_state_dict"])
-        print(f"  Loaded epoch {state['epoch']} (val_rmse={state['best_val_rmse']:.4f})")
+    best_path = Path(cfg.training.checkpoint_dir) / "best.pt"
+    state = load_checkpoint(best_path, map_location=device)
+    print(f"Loading best checkpoint: {best_path}")
+    model.load_state_dict(state["model_state_dict"])
+    print(f"  Loaded epoch {state['epoch']} (val_rmse={state['trainer_state']['best_val_rmse']:.4f})")
 
     print("Evaluating on test set...")
     if hasattr(trainer, "evaluate_with_adapt") and cfg.get("meta", {}).get("adapt_eval", True):

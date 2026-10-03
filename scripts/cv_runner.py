@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.config import load_config, resolve_device
 from src.eval.metrics import compute_metrics, format_metrics
+from src.training.checkpointing import json_fingerprint, load_checkpoint, resolved_config
 
 
 def set_seed(seed: int):
@@ -45,6 +46,30 @@ def kfold_entities(entities, k, seed):
     ents = sorted(set(entities))
     rng.shuffle(ents)
     return [set(f.tolist()) for f in np.array_split(ents, k)]
+
+
+def fold_manifest(model: str, split_by: str, fold_idx: int, splits: dict) -> dict:
+    """Portable identity of a v3 fold, used to reject stale checkpoints."""
+    parts = {}
+    for name, frame in splits.items():
+        records = [
+            [int(index), str(row.Drug_ID), str(row.Cell_Line_ID), float(row.Y)]
+            for index, row in frame[["Drug_ID", "Cell_Line_ID", "Y"]].iterrows()
+        ]
+        parts[name] = {
+            "row_indices": [int(i) for i in frame.index.tolist()],
+            "drug_ids": sorted(map(str, frame["Drug_ID"].unique())),
+            "cell_ids": sorted(map(str, frame["Cell_Line_ID"].unique())),
+            "n_rows": len(frame),
+            "data_fingerprint": json_fingerprint(records),
+        }
+    return {
+        "protocol": "v3",
+        "model": model,
+        "split_by": split_by,
+        "fold": fold_idx + 1,
+        "parts": parts,
+    }
 
 
 def build_scaffold_map(drug_smiles: dict) -> dict:
@@ -187,6 +212,7 @@ def run_cellquery(cfg, fold_df, fold_idx, device, out_dir, skip_train: bool = Fa
     splits = make_fold_split(df, cfg.cv.k, cfg.cv.split_by, cfg.training.seed, fold_idx,
                              scaffold_map=scaffold_map)
     train_df, valid_df, test_df = splits["train"], splits["valid"], splits["test"]
+    manifest = fold_manifest("cellquery", cfg.cv.split_by, fold_idx, splits)
 
     registries = _build_registries(df, smiles_series, cell_series, cfg,
                                    train_cell_ids=set(train_df["Cell_Line_ID"].unique()))
@@ -219,18 +245,23 @@ def run_cellquery(cfg, fold_df, fold_idx, device, out_dir, skip_train: bool = Fa
     fold_cfg = copy.deepcopy(cfg)
     fold_dir = out_dir / f"fold_{fold_idx+1}"
     fold_cfg.training.checkpoint_dir = str(fold_dir)
-    trainer = Trainer(model, fold_cfg, tr, va, device)
+    fold_dir.mkdir(parents=True, exist_ok=True)
+    (fold_dir / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    trainer = Trainer(model, fold_cfg, tr, va, device, run_manifest=manifest)
+    if skip_train and not (fold_dir / "best.pt").is_file():
+        raise FileNotFoundError(f"--skip_train requested but checkpoint is missing: {fold_dir / 'best.pt'}")
     if not skip_train:
         trainer.train()
-        vm = trainer.evaluate(va)
-    else:
-        vm = None
 
     # test-set predictions (reload best checkpoint)
     best = fold_dir / "best.pt"
-    if best.exists():
-        ck = torch.load(best, map_location=device, weights_only=False)
-        model.load_state_dict(ck["model_state_dict"])
+    ck = load_checkpoint(
+        best, map_location=device,
+        expected_config_fingerprint=json_fingerprint(resolved_config(fold_cfg)),
+        expected_manifest_fingerprint=json_fingerprint(manifest),
+    )
+    model.load_state_dict(ck["model_state_dict"])
+    vm = trainer.evaluate(va)
     preds, labels = [], []
     model.eval()
     with torch.no_grad():
@@ -245,7 +276,7 @@ def run_cellquery(cfg, fold_df, fold_idx, device, out_dir, skip_train: bool = Fa
             "test_drug_ids": [str(x) for x in test_df["Drug_ID"].values]}
 
 
-def run_candela_mgataf(model_name, cfg, fold_df, fold_idx, device, out_dir, skip_train: bool = False):
+def run_baseline(model_name, cfg, fold_df, fold_idx, device, out_dir, skip_train: bool = False):
     bl_root = ROOT / "baselines"
     sys.path.insert(0, str(bl_root))
     if model_name == "candela":
@@ -253,11 +284,18 @@ def run_candela_mgataf(model_name, cfg, fold_df, fold_idx, device, out_dir, skip
         import candela.data as data_mod
         import candela.model as model_mod
         import candela.trainer as trainer_mod
-    else:
+    elif model_name == "mgataf":
         sys.path.insert(0, str(ROOT / "baselines" / "mgataf"))
         import mgataf.data as data_mod
         import mgataf.model as model_mod
         import mgataf.trainer as trainer_mod
+    elif model_name == "graphdrp":
+        sys.path.insert(0, str(ROOT / "baselines" / "graphdrp"))
+        import graphdrp.data as data_mod
+        import graphdrp.model as model_mod
+        import graphdrp.trainer as trainer_mod
+    else:
+        raise ValueError(f"Unsupported baseline: {model_name}")
 
     # Build full df the same way each baseline does
     if model_name == "candela":
@@ -284,12 +322,17 @@ def run_candela_mgataf(model_name, cfg, fold_df, fold_idx, device, out_dir, skip
     scaffold_map = build_scaffold_map(drug_smiles) if cfg.cv.split_by == "scaffold_cold" else None
     splits = make_fold_split(df, cfg.cv.k, cfg.cv.split_by, cfg.training.seed, fold_idx,
                              scaffold_map=scaffold_map)
+    manifest = fold_manifest(model_name, cfg.cv.split_by, fold_idx, splits)
 
-    tr, va, te, registries, meta = data_mod.get_mgataf_dataloaders(
-        cfg, train_df=splits["train"], valid_df=splits["valid"], test_df=splits["test"]
-    ) if model_name == "mgataf" else data_mod.get_candela_dataloaders(
-        cfg, train_df=splits["train"], valid_df=splits["valid"], test_df=splits["test"]
-    )
+    if model_name == "candela":
+        tr, va, te, registries, meta = data_mod.get_candela_dataloaders(
+            cfg, train_df=splits["train"], valid_df=splits["valid"], test_df=splits["test"])
+    elif model_name == "mgataf":
+        tr, va, te, registries, meta = data_mod.get_mgataf_dataloaders(
+            cfg, train_df=splits["train"], valid_df=splits["valid"], test_df=splits["test"])
+    else:
+        tr, va, te, registries, meta = data_mod.get_graphdrp_dataloaders(
+            cfg, train_df=splits["train"], valid_df=splits["valid"], test_df=splits["test"])
 
     cell_dim = meta["cell_dim"]
     if model_name == "candela":
@@ -298,32 +341,46 @@ def run_candela_mgataf(model_name, cfg, fold_df, fold_idx, device, out_dir, skip
             drug_graphs=registries["drug_graphs"],
             cell_table=registries["cell_table"],
         )
-    else:
+    elif model_name == "mgataf":
         model = model_mod.MGATAF.from_config(
             cell_dim=cell_dim, cfg=cfg,
             drug_graphs=registries["drug_graphs"],
             cell_table=registries["cell_table"],
             drug_fp_table=registries["drug_fp_table"],
         )
+    else:
+        model = model_mod.GraphDRP.from_config(
+            cell_dim=cell_dim, cfg=cfg,
+            drug_graphs=registries["drug_graphs"],
+            cell_table=registries["cell_table"],
+        )
 
     fold_cfg = copy.deepcopy(cfg)
     fold_dir = out_dir / f"fold_{fold_idx+1}"
     fold_cfg.training.checkpoint_dir = str(fold_dir)
+    fold_dir.mkdir(parents=True, exist_ok=True)
+    (fold_dir / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
-    if model_name == "candela":
-        trainer = trainer_mod.Trainer(model, fold_cfg, tr, va, device)
+    if model_name in {"candela", "graphdrp"}:
+        trainer = trainer_mod.Trainer(model, fold_cfg, tr, va, device, run_manifest=manifest)
     else:
         trainer = trainer_mod.Trainer(model, fold_cfg, tr, va, device,
-                                      label_scaler=registries.get("label_scaler"))
+                                      label_scaler=registries.get("label_scaler"),
+                                      run_manifest=manifest)
+    if skip_train and not (fold_dir / "best.pt").is_file():
+        raise FileNotFoundError(f"--skip_train requested but checkpoint is missing: {fold_dir / 'best.pt'}")
     if not skip_train:
         trainer.train()
-        vm = trainer.evaluate(va)
-    else:
-        vm = None
     best = fold_dir / "best.pt"
-    if best.exists():
-        ck = torch.load(best, map_location=device, weights_only=False)
-        model.load_state_dict(ck["model_state_dict"])
+    if not best.is_file():
+        raise FileNotFoundError(f"Training did not produce best checkpoint: {best}")
+    ck = load_checkpoint(
+        best, map_location=device,
+        expected_config_fingerprint=json_fingerprint(resolved_config(fold_cfg)),
+        expected_manifest_fingerprint=json_fingerprint(manifest),
+    )
+    model.load_state_dict(ck["model_state_dict"])
+    vm = trainer.evaluate(va)
     preds, labels = [], []
     model.eval()
     with torch.no_grad():
@@ -365,7 +422,7 @@ def compute_drug_level_metrics(drug_ids, preds, labels):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True,
-                        choices=["cellquery", "candela", "mgataf"])
+                        choices=["cellquery", "candela", "mgataf", "graphdrp"])
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--k", type=int, default=6)
     parser.add_argument("--split_by", type=str, required=True,
@@ -421,8 +478,8 @@ def main():
         if args.model == "cellquery":
             r = run_cellquery(cfg, None, fi, device, out_root, skip_train=args.skip_train)
         else:
-            r = run_candela_mgataf(args.model, cfg, None, fi, device, out_root,
-                                   skip_train=args.skip_train)
+            r = run_baseline(args.model, cfg, None, fi, device, out_root,
+                             skip_train=args.skip_train)
         results.append(r)
         all_preds.append(r["test_preds"])
         all_labels.append(r["test_labels"])

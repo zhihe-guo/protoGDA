@@ -16,25 +16,26 @@
 | `baselines/mgataf/` | Saeed et al., "MGATAF: multi-channel graph attention network with adaptive fusion for cancer-drug response prediction", BMC Bioinformatics (2025) | 作者未公开发布代码（按论文声明需邮件索取），故采用独立重写 |
 | `baselines/graphdrp/` | Nguyen et al., "Graph Convolutional Networks for Drug Response Prediction", IEEE/ACM TCBB (2021) | 官方仓库 `hauldhut/GraphDRP`，Apache-2.0 |
 
-`scripts/cv_runner.py` 中冷支架（scaffold-cold）划分协议参照
+`scripts/cv_runner.py` 中 scaffold-blind 划分协议参照
 TransCDR（Xia et al., BMC Biology 2024）的 Murcko 骨架划分方法；TransCDR 官方
-代码（GitHub / Zenodo）未提供开源许可，本仓库**不包含**其代码。
+代码（GitHub / Zenodo）未提供开源许可，本仓库**不包含**其代码。配置名仍为
+`scaffold_cold`，论文术语为 scaffold-blind。
 
 ## `pretrained/` 权重
 
-`pretrained/` 下的 `.pt` 文件为本工作训练所得的模型权重（保留所有权利，见仓库
-顶部说明），对应论文第 5 章各场景结果：
+`pretrained/` 下的 `.pt` 文件为本工作已完成训练的补充检查点（保留所有权利，见仓库
+顶部说明）。它们不是 Zenodo 归档，也不能单独重绘全部图表。各目录 `cv_results.json`
+的折均值与下列已报告的交叉验证均值相对应：
 
-| 目录 | 对应论文结果 |
+| 目录 | 对应已报告结果 |
 |---|---|
-| `protoGDA_interpolation/` | 表 1/2 内插 CV（0.9344 ± 0.0016） |
-| `protoGDA_cell_cold/` | 表 1/2 细胞冷启动 CV（0.8735 ± 0.0036） |
-| `protoGDA_drug_cold/` | 表 1/2 药物冷启动 CV（0.5305 ± 0.1842）与表 4 GDSC1 外部验证 |
-| `protoGDA_scaffold_cold/` | 表 2 冷支架启动 CV（0.5067 ± 0.1035） |
-| `CANDELA_drug_cold/`, `MGATAF_drug_cold/` | 表 1 药物冷启动基线（v3 确定性协议复现） |
+| `protoGDA_interpolation/` | 表 1/2 unblinded CV（0.9344 ± 0.0016） |
+| `protoGDA_cell_cold/` | 表 1/2 cell-line-blind CV（0.8735 ± 0.0036） |
+| `protoGDA_drug_cold/` | 表 1/2 drug-blind CV（0.5305 ± 0.1842）与表 4 GDSC1 外部验证 |
+| `protoGDA_scaffold_cold/` | 表 2 scaffold-blind CV（0.5067 ± 0.1035） |
+| `CANDELA_drug_cold/`, `MGATAF_drug_cold/` | 表 1 drug-blind 基线（确定性 60 epoch、验证 Pearson 选检查点） |
 
-各目录同时含 `cv_results.json`（逐折 + 汇总指标）；`external_gdsc1_*.json`
-为 5.3 节 GDSC1 零样本外部验证结果。
+`external_gdsc1_*.json` 为 GDSC1 零样本外部验证结果。
 
 ## 其它第三方资源
 

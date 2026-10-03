@@ -8,6 +8,7 @@ Label scaler is preserved for inverse-transform during eval.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,14 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, ReduceLROnPlat
 from tqdm import tqdm
 
 from src.eval.metrics import compute_metrics, format_metrics
+from src.training.checkpointing import (
+    atomic_torch_save,
+    build_checkpoint,
+    json_fingerprint,
+    resolved_config,
+    restore_training_state,
+    load_checkpoint,
+)
 
 
 class Trainer:
@@ -29,6 +38,7 @@ class Trainer:
         valid_loader,
         device: str,
         label_scaler: dict | None = None,
+        run_manifest: dict | None = None,
     ):
         self.model = model.to(device)
         self.cfg = cfg
@@ -36,6 +46,9 @@ class Trainer:
         self.valid_loader = valid_loader
         self.device = device
         self.label_scaler = label_scaler
+        self.run_manifest = run_manifest or {}
+        self.config_fingerprint = json_fingerprint(resolved_config(cfg))
+        self.manifest_fingerprint = json_fingerprint(self.run_manifest)
 
         self.criterion = torch.nn.MSELoss()
         self.optimizer = Adam(
@@ -198,18 +211,53 @@ class Trainer:
             metrics["pearson_raw"] = raw["pearson"]
         return metrics
 
-    def save_checkpoint(self, epoch: int, is_best: bool = False):
-        state = {
-            "epoch": epoch,
-            "model_state_dict": self.model.state_dict(),
-            "optimizer_state_dict": self.optimizer.state_dict(),
+    def _trainer_state(self, history: list[dict]) -> dict:
+        return {
             "best_val_rmse": self.best_val_rmse,
             "checkpoint_metric": self.checkpoint_metric,
             "best_val_score": self.best_val_score,
+            "best_epoch": self.best_epoch,
+            "no_improve_count": self.no_improve_count,
+            "history": history,
         }
-        torch.save(state, self.checkpoint_dir / "last.pt")
+
+    def save_checkpoint(self, epoch: int, history: list[dict] | None = None, is_best: bool = False):
+        state = build_checkpoint(
+            model=self.model,
+            optimizer=self.optimizer,
+            scheduler=self.scheduler,
+            plateau_scheduler=self.plateau_scheduler,
+            epoch=epoch,
+            trainer_state=self._trainer_state(history or []),
+            cfg=self.cfg,
+            run_manifest=self.run_manifest,
+            extra_state={"label_scaler": self.label_scaler},
+        )
+        atomic_torch_save(state, self.checkpoint_dir / "last.pt")
         if is_best:
-            torch.save(state, self.checkpoint_dir / "best.pt")
+            atomic_torch_save(state, self.checkpoint_dir / "best.pt")
+
+    def resume(self, path: str | Path) -> list[dict]:
+        state = load_checkpoint(
+            path,
+            map_location=self.device,
+            expected_config_fingerprint=self.config_fingerprint,
+            expected_manifest_fingerprint=self.manifest_fingerprint,
+        )
+        trainer_state = restore_training_state(
+            state, model=self.model, optimizer=self.optimizer,
+            scheduler=self.scheduler, plateau_scheduler=self.plateau_scheduler,
+        )
+        if trainer_state.get("checkpoint_metric") != self.checkpoint_metric:
+            raise ValueError("Checkpoint selection metric does not match current configuration.")
+        self.best_val_rmse = float(trainer_state["best_val_rmse"])
+        self.best_val_score = float(trainer_state["best_val_score"])
+        self.best_epoch = int(trainer_state["best_epoch"])
+        self.no_improve_count = int(trainer_state["no_improve_count"])
+        history = trainer_state.get("history", [])
+        if not isinstance(history, list) or len(history) != int(state["epoch"]):
+            raise ValueError("Checkpoint history is missing or does not match its epoch.")
+        return history
 
     def save_history(self, history: list[dict]) -> None:
         """Atomically persist completed epochs so interrupted runs remain usable."""
@@ -219,14 +267,20 @@ class Trainer:
             json.dump(history, f, indent=2)
         tmp_path.replace(history_path)
 
-    def train(self) -> dict:
-        history: list[dict] = []
+    def train(self, resume_path: str | Path | None = None) -> dict:
+        history = self.resume(resume_path) if resume_path is not None else []
         warmup_epochs = self.cfg.training.warmup_epochs
         early_stop_patience = self.cfg.training.early_stopping_patience
 
-        for epoch in range(1, self.cfg.training.epochs + 1):
+        for epoch in range(len(history) + 1, self.cfg.training.epochs + 1):
             train_metrics = self.train_epoch(epoch)
             val_metrics = self.evaluate(self.valid_loader)
+            val_score = val_metrics[self.checkpoint_metric]
+            if not math.isfinite(float(val_score)):
+                raise FloatingPointError(
+                    f"Non-finite validation {self.checkpoint_metric} at epoch {epoch}; "
+                    "checkpoint was not updated."
+                )
 
             # A cosine schedule is a SequentialLR (warmup + cosine) and must
             # advance every epoch. Plateau warmup, by contrast, advances only
@@ -260,7 +314,6 @@ class Trainer:
                 print(f"  [GRAD] avg/step | L2: cell={gn_c:.3f} drug={gn_d:.3f} | "
                       f"RMS: cell={rms_c:.4f} drug={rms_d:.4f} ratio={rms_r:.2f}")
 
-            val_score = val_metrics[self.checkpoint_metric]
             is_best = (
                 val_score < self.best_val_score
                 if self.checkpoint_metric == "rmse"
@@ -274,7 +327,7 @@ class Trainer:
             else:
                 self.no_improve_count += 1
 
-            self.save_checkpoint(epoch, is_best=is_best)
+            self.save_checkpoint(epoch, history, is_best=is_best)
             self.save_history(history)
 
             if self.no_improve_count >= early_stop_patience:

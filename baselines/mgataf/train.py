@@ -20,6 +20,11 @@ from data import get_mgataf_dataloaders
 from model import MGATAF
 from trainer import Trainer
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+from src.training.checkpointing import load_checkpoint  # noqa: E402
+
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -32,9 +37,15 @@ def set_seed(seed: int):
 def main():
     parser = argparse.ArgumentParser(description="Train MGATAF")
     parser.add_argument("--config", type=str, default="config_interpolation.yaml")
+    parser.add_argument("--resume", type=str, default=None,
+                        help="Resume a compatible epoch-boundary checkpoint")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    checkpoint_dir = Path(cfg.training.checkpoint_dir)
+    if not checkpoint_dir.is_absolute():
+        checkpoint_dir = PROJECT_ROOT / checkpoint_dir
+    cfg.training.checkpoint_dir = str(checkpoint_dir)
     set_seed(cfg.training.seed)
     device = resolve_device(cfg.training.device)
     print(f"Using device: {device}")
@@ -59,16 +70,15 @@ def main():
     )
 
     print("Starting training...")
-    result = trainer.train()
+    result = trainer.train(resume_path=args.resume)
     print(f"Training finished. Best validation RMSE: {result['best_val_rmse']:.4f}")
 
     # Load best checkpoint
     best_path = Path(cfg.training.checkpoint_dir) / "best.pt"
-    if best_path.exists():
-        print(f"Loading best checkpoint: {best_path}")
-        state = torch.load(best_path, map_location=device, weights_only=False)
-        model.load_state_dict(state["model_state_dict"])
-        print(f"  Loaded epoch {state['epoch']} (val_rmse={state['best_val_rmse']:.4f})")
+    state = load_checkpoint(best_path, map_location=device)
+    print(f"Loading best checkpoint: {best_path}")
+    model.load_state_dict(state["model_state_dict"])
+    print(f"  Loaded epoch {state['epoch']} (val_rmse={state['trainer_state']['best_val_rmse']:.4f})")
 
     print("Evaluating on test set...")
     test_metrics = trainer.evaluate(te)
@@ -80,7 +90,7 @@ def main():
 
     summary = {
         "model": "MGATAF",
-        "best_epoch": state["epoch"] if best_path.exists() else trainer.best_epoch,
+        "best_epoch": state["epoch"],
         "best_val_rmse": trainer.best_val_rmse,
         "test": test_metrics,
     }

@@ -1,4 +1,9 @@
-# Cell-Drug Cross-Attention 默认配置（基底 = GINE + GMM 药效团模态）
+# DEVELOPMENT TEMPLATE — not a canonical paper-reproduction configuration.
+# Formal runs use config/cellquery_interpolation.yaml, cellquery_cell_cold.yaml,
+# cellquery_drug_cold.yaml, and cellquery_scaffold_cold.yaml.
+# The formal drug tower is EGNN with invariant-based graph attention and
+# pharmacophore GMM features. Files named exp_*.yaml and cv_abl_*.yaml are
+# ablation or development settings, not additional reported protocols.
 #
 # 结构：
 #   data      数据源、缓存路径与数据划分
@@ -8,14 +13,9 @@
 #   meta      元学习（默认关闭）
 #   cv        交叉验证（默认关闭）
 #
-# 基底选型依据（25ep 同口径实验，详见 results.md）：
-#   drug_cold  Test Pearson：GINE+GMM=0.6894 > GAT 无药效团=0.6552 > 其余
-#   interpolation Test RMSE：GINE+GMM=1.1550 < GAT 无药效团=1.1662
-#   → 药效团 GMM 模态的最优承载架构为 GINE（2D 拓扑 + 键类型语境 + sum 聚合）。
-#
-# 药冷提示：drug_cold 分裂下验证集仅含 ~13 个药物，val_rmse 噪声大，
-# 早停可能在 epoch 5 附近触发；药物侧正则化（drug_dropout/drug_noise_std）
-# 建议保持 >=0.3，防止模型死记训练药物。
+# drug-blind 提示：验证集药物数量少，val RMSE 噪声大。正式药物盲测协议关闭早停，
+# 固定 60 epoch，并以验证集 Pearson 选择 checkpoint。药物侧正则化
+# （drug_dropout / drug_noise_std）建议保持 >= 0.3。
 
 data:
   dataset_name: GDSC2
@@ -42,13 +42,13 @@ model:
   # ---- 基础架构 ---------------------------------------------------------
   hidden_dim: 64              # D：统一隐藏维度
   num_gnn_layers: 3           # GNN 层数
-  gnn_type: egnn              # GNN 类型：egnn（基底，含自注意力）| gine | gat | gcn | egconv
+  gnn_type: egnn              # GNN 类型：egnn（正式基底）| gine | gat | gcn | egconv
   gnn_heads: 8                # GNN 多头注意力头数
   dropout: 0.1                # 全局 Dropout 概率
   num_probes: 16              # M：细胞系通路探针 token 数量
   num_heads_cross_attn: 8     # 交叉注意力头数
   readout_hidden: [256, 128]  # Readout MLP 各隐藏层维度
-  egnn_use_attention: true    # EGNN 消息内自注意力（softmax 邻居加权，保持等变性）——正式基底开启
+  egnn_use_attention: true    # EGNN 消息内基于不变量的图注意力（softmax 邻居加权）——正式基底开启
 
   # ---- 交互模式 ---------------------------------------------------------
   interaction_mode: residual   # memory（门控记忆累积）| residual（Q 自更新残差连接）

@@ -327,6 +327,28 @@ def _pca_reduce(features: np.ndarray, n_components: int) -> np.ndarray:
     return reduced
 
 
+def _pca_fit_transform_train_only(
+    train_features: np.ndarray, all_features: np.ndarray, n_components: int
+) -> tuple[np.ndarray, dict]:
+    """Fit PCA only on training cells, then transform every split."""
+    try:
+        from sklearn.decomposition import PCA
+        pca = PCA(n_components=n_components, random_state=42)
+        pca.fit(train_features)
+        return pca.transform(all_features).astype(np.float32), {
+            "mean": pca.mean_, "components": pca.components_,
+        }
+    except ImportError:
+        train = torch.from_numpy(train_features.astype(np.float32))
+        mean = train.mean(dim=0)
+        _, _, vectors = torch.linalg.svd(train - mean, full_matrices=False)
+        components = vectors[:n_components]
+        out = ((torch.from_numpy(all_features.astype(np.float32)) - mean) @ components.T)
+        return out.numpy().astype(np.float32), {
+            "mean": mean.numpy(), "components": components.numpy(),
+        }
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -418,18 +440,25 @@ def get_mgataf_dataloaders(cfg: DictConfig,
             cell_rows.append(feat)
         cell_features = np.stack(cell_rows, axis=0)
 
-    # Z-score normalize cell features
-    mean = cell_features.mean(axis=0)
-    std = cell_features.std(axis=0)
+    # Fit normalization and PCA only on training cells, especially for cell-cold CV.
+    train_cells = set(splits["train"]["Cell_Line_ID"].unique())
+    train_mask = np.array([cid in train_cells for cid in cell_ids], dtype=bool)
+    if not train_mask.any():
+        raise ValueError("Training split contains no cells for feature preprocessing.")
+    mean = cell_features[train_mask].mean(axis=0)
+    std = cell_features[train_mask].std(axis=0)
     std[std < 1e-8] = 1.0
     cell_features = ((cell_features - mean) / std).astype(np.float32)
     print(f"  Cell table shape: {cell_features.shape}")
 
     # --- Optional PCA reduction (for high-dim gene expression fallback) ---
     cell_pca_dim = cfg.data.get("cell_pca_dim", 0)
+    pca_state = None
     if cell_pca_dim > 0 and cell_pca_dim < cell_features.shape[1]:
         print(f"  Applying PCA: {cell_features.shape[1]} -> {cell_pca_dim} ...")
-        cell_features = _pca_reduce(cell_features, n_components=cell_pca_dim)
+        cell_features, pca_state = _pca_fit_transform_train_only(
+            cell_features[train_mask], cell_features, n_components=cell_pca_dim
+        )
         print(f"  Cell table shape after PCA: {cell_features.shape}")
 
     cell_table = torch.from_numpy(cell_features)
@@ -475,6 +504,10 @@ def get_mgataf_dataloaders(cfg: DictConfig,
         "drug_id_to_idx": drug_id_to_idx,
         "cell_id_to_idx": cell_id_to_idx,
         "drug_fp_table": drug_fp_table,
+        "cell_preprocessing": {
+            "mean": mean, "std": std, "pca": pca_state,
+            "fit_cell_ids": sorted(map(str, train_cells)),
+        },
         "label_scaler": label_scaler,
         "train_df": splits["train"],
     }

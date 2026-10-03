@@ -46,6 +46,7 @@ CHECKPOINT_DIRS = {
     "cellquery": "checkpoints/cv_drug_cold_v3",
     "candela": "checkpoints/cv_candela_drug_cold_v3",
     "mgataf": "checkpoints/cv_mgataf_drug_cold_v3",
+    "graphdrp": "checkpoints/cv_graphdrp_drug_cold_v3",
 }
 
 
@@ -109,22 +110,30 @@ def run_fold_baseline(model_name, cfg, full, part, fi, device, ckpt_dir):
         sys.path.insert(0, str(ROOT / "baselines" / "candela"))
         import candela.data as data_mod
         import candela.model as model_mod
-    else:
+    elif model_name == "mgataf":
         sys.path.insert(0, str(ROOT / "baselines" / "mgataf"))
         import mgataf.data as data_mod
         import mgataf.model as model_mod
+    elif model_name == "graphdrp":
+        sys.path.insert(0, str(ROOT / "baselines" / "graphdrp"))
+        import graphdrp.data as data_mod
+        import graphdrp.model as model_mod
+    else:
+        raise ValueError(f"Unsupported baseline: {model_name}")
 
     df, _, _ = full
     splits = make_fold_split(df, 6, "drug_cold", cfg.training.seed, fi)
 
     test_df = build_test_df(model_name, part, None, None, None)
-    _, _, te, registries, meta = (
-        data_mod.get_candela_dataloaders(cfg, train_df=splits["train"],
-                                         valid_df=splits["valid"], test_df=test_df)
-        if model_name == "candela" else
-        data_mod.get_mgataf_dataloaders(cfg, train_df=splits["train"],
-                                        valid_df=splits["valid"], test_df=test_df)
-    )
+    if model_name == "candela":
+        _, _, te, registries, meta = data_mod.get_candela_dataloaders(
+            cfg, train_df=splits["train"], valid_df=splits["valid"], test_df=test_df)
+    elif model_name == "mgataf":
+        _, _, te, registries, meta = data_mod.get_mgataf_dataloaders(
+            cfg, train_df=splits["train"], valid_df=splits["valid"], test_df=test_df)
+    else:
+        _, _, te, registries, meta = data_mod.get_graphdrp_dataloaders(
+            cfg, train_df=splits["train"], valid_df=splits["valid"], test_df=test_df)
     cell_dim = meta["cell_dim"]
     if model_name == "candela":
         model = model_mod.CANDELA.from_config(
@@ -132,12 +141,18 @@ def run_fold_baseline(model_name, cfg, full, part, fi, device, ckpt_dir):
             drug_graphs=registries["drug_graphs"],
             cell_table=registries["cell_table"],
         )
-    else:
+    elif model_name == "mgataf":
         model = model_mod.MGATAF.from_config(
             cell_dim=cell_dim, cfg=cfg,
             drug_graphs=registries["drug_graphs"],
             cell_table=registries["cell_table"],
             drug_fp_table=registries["drug_fp_table"],
+        )
+    else:
+        model = model_mod.GraphDRP.from_config(
+            cell_dim=cell_dim, cfg=cfg,
+            drug_graphs=registries["drug_graphs"],
+            cell_table=registries["cell_table"],
         )
     model.to(device)
     return model, te, registries
@@ -313,6 +328,7 @@ def main() -> None:
         "per_drug_pearson_mean": float(pr.mean()),
         "per_drug_pearson_std": float(pr.std()),
         "per_drug_pearson_n": int(len(pr)),
+        "per_drug_pearson": [float(x) for x in pr],
     }
     dest = ROOT / "checkpoints" / f"external_gdsc1_{model}_results.json"
     dest.write_text(json.dumps(out, indent=2))

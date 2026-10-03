@@ -1,4 +1,4 @@
-# Full pytdc with all submodules (single-cell, proteomics, etc.)
-pytdc>=0.4.0
+# Version used by the submitted GDSC2 loading implementation.
+pytdc==1.1.15
 fuzzywuzzy>=0.18.0
 python-Levenshtein>=0.27.0

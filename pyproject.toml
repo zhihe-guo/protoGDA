@@ -21,8 +21,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Linux only: pytdc works out-of-box (tiledbsoma wheels available)
-linux-data = ["pytdc>=0.4.0", "fuzzywuzzy>=0.18.0", "python-Levenshtein>=0.27.0"]
+# Linux only: PyTDC works out-of-box (tiledbsoma wheels available).
+linux-data = ["pytdc==1.1.15", "fuzzywuzzy>=0.18.0", "python-Levenshtein>=0.27.0"]
 dev = [
     "jupyter>=1.0.0",
     "matplotlib>=3.7.0",
