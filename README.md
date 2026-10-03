@@ -14,10 +14,6 @@ The manuscript is under submission to BMC Bioinformatics. A DOI will be added he
 | Operating system | Linux (Ubuntu 20.04/22.04 recommended). Windows is supported for the data extra below. macOS has not been verified. |
 | Programming language | Python >= 3.9, PyTorch >= 2.0, PyTorch Geometric, RDKit |
 | Other requirements | PyTDC 1.1.15 for GDSC2 loading; optional Matplotlib/Seaborn for attention export |
-| License | All rights reserved. No open-source license is distributed with this repository. |
-| Restrictions | Supplied for editorial and peer review, and for academic inspection. Reuse in another project or product requires prior permission from the author. |
-
-During review the repository is private and access is provided to editors and reviewers. It will be made public upon acceptance.
 
 ## What this repository contains
 
@@ -29,8 +25,6 @@ During review the repository is private and access is provided to editors and re
 - Attention-weight export: `scripts/export_attention.py`
 
 `config/default.yaml` is a development template. `config/exp_*.yaml` and `config/cv_abl_*.yaml` are ablation or development settings; they are not additional reported protocols.
-
-This repository does not provide a Zenodo archive or a one-command workflow that regenerates every table and figure. Feature caches under `data/` are created locally and are not redistributed.
 
 ## Installation
 
@@ -56,10 +50,6 @@ Replace `--split_by` and `--config` with `interpolation`, `cell_cold`, or `scaff
 
 GDSC1 zero-shot evaluation is `scripts/external_validate_gdsc1.py`. It requires a locally prepared `data/gdsc1.pkl` and saved drug-blind checkpoints.
 
-## Supplementary checkpoints
-
-`pretrained/` contains checkpoints and `cv_results.json` summaries from the formal runs already completed. The fold-mean Pearson values in those summaries correspond to the cross-validation means reported for those runs. These files are supplementary: the manuscript does not treat them as an archived release, and they do not by themselves regenerate the figures.
-
 ## Attention export
 
 ```bash
@@ -70,9 +60,5 @@ python scripts/export_attention.py \
 ```
 
 The script evaluates one batch with `return_attention=True` and writes per-layer probe-to-atom weights plus a heatmap. It does not require retraining.
-
-## Terminology
-
-The four evaluation scenarios are unblinded, cell-line-blind, drug-blind, and scaffold-blind. Internal configuration names remain `interpolation`, `cell_cold`, `drug_cold`, and `scaffold_cold`. The drug-tower attention mechanism is invariant-based graph attention inside EGNN, not a separate EQGAT module.
 
 Third-party attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
