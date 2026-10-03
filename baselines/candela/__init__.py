@@ -1,1 +1,0 @@
-# CANDELA baseline
